@@ -32,9 +32,11 @@ const categoryOrder = ['大件装备', '照明电源', '做饭装备', '吃食�
 export default function CampClaimPage() {
   const [data, setData] = useState<ApiPayload | null>(null)
   const [loading, setLoading] = useState(true)
-  const [pendingKey, setPendingKey] = useState<string | null>(null) // `${id}-${role}-${delta}` or `qty-${id}`
+  const [pendingKey, setPendingKey] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null) // 待二次确认的删除项
   const [error, setError] = useState('')
+  const [showManage, setShowManage] = useState(false) // 装备管理面板（含添加和删除）
   const [showAddForm, setShowAddForm] = useState(false)
   const [addForm, setAddForm] = useState({ name: '', category: '大件装备', note: '', quantity: '1' })
   const [adding, setAdding] = useState(false)
@@ -94,6 +96,7 @@ export default function CampClaimPage() {
 
   async function handleDelete(itemId: string) {
     setDeletingId(itemId)
+    setConfirmDeleteId(null)
     const res = await fetch('/api/camp-claim', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
@@ -198,71 +201,130 @@ export default function CampClaimPage() {
               </div>
             </article>
 
-            {/* 添加装备 */}
+            {/* 装备管理（添加 + 删除） */}
             <article className="panel">
               <div className="panel-inner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
                 <div>
                   <h2 style={{ margin: 0, fontSize: 20 }}>装备管理</h2>
-                  <p className="panel-copy" style={{ marginTop: 4 }}>添加新装备，可设置总数量。</p>
+                  <p className="panel-copy" style={{ marginTop: 4 }}>添加或删除装备。</p>
                 </div>
                 <button
                   type="button"
                   className="primary-btn role-moku"
                   style={{ minWidth: 120 }}
-                  onClick={() => setShowAddForm(v => !v)}
+                  onClick={() => {
+                    setShowManage(v => !v)
+                    setShowAddForm(false)
+                    setConfirmDeleteId(null)
+                  }}
                 >
-                  {showAddForm ? '取消' : '+ 添加装备'}
+                  {showManage ? '收起' : '管理装备'}
                 </button>
               </div>
 
-              {showAddForm && (
-                <div className="panel-inner" style={{ borderTop: '1px solid var(--border)', paddingTop: 20 }}>
-                  <form onSubmit={handleAdd} style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      <label style={{ fontSize: 13, fontWeight: 600 }}>装备名称 *</label>
-                      <input
-                        required
-                        value={addForm.name}
-                        onChange={e => setAddForm(f => ({ ...f, name: e.target.value }))}
-                        placeholder="如：睡袋"
-                        style={inputStyle}
-                      />
+              {showManage && (
+                <div className="panel-inner" style={{ borderTop: '1px solid var(--border)', paddingTop: 20, display: 'flex', flexDirection: 'column', gap: 20 }}>
+                  {/* 添加新装备 */}
+                  <div>
+                    <button
+                      type="button"
+                      className="ghost-btn"
+                      onClick={() => setShowAddForm(v => !v)}
+                      style={{ marginBottom: 12 }}
+                    >
+                      {showAddForm ? '▲ 收起添加' : '▼ 添加新装备'}
+                    </button>
+                    {showAddForm && (
+                      <form onSubmit={handleAdd} style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <label style={{ fontSize: 13, fontWeight: 600 }}>装备名称 *</label>
+                          <input
+                            required
+                            value={addForm.name}
+                            onChange={e => setAddForm(f => ({ ...f, name: e.target.value }))}
+                            placeholder="如：睡袋"
+                            style={inputStyle}
+                          />
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <label style={{ fontSize: 13, fontWeight: 600 }}>分类</label>
+                          <select
+                            value={addForm.category}
+                            onChange={e => setAddForm(f => ({ ...f, category: e.target.value }))}
+                            style={inputStyle}
+                          >
+                            {categoryOrder.map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <label style={{ fontSize: 13, fontWeight: 600 }}>总数量</label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={addForm.quantity}
+                            onChange={e => setAddForm(f => ({ ...f, quantity: e.target.value }))}
+                            style={inputStyle}
+                          />
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <label style={{ fontSize: 13, fontWeight: 600 }}>备注</label>
+                          <input
+                            value={addForm.note}
+                            onChange={e => setAddForm(f => ({ ...f, note: e.target.value }))}
+                            placeholder="可选"
+                            style={inputStyle}
+                          />
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                          <button type="submit" className="primary-btn role-moku" disabled={adding} style={{ width: '100%' }}>
+                            {adding ? '添加中...' : '确认添加'}
+                          </button>
+                        </div>
+                      </form>
+                    )}
+                  </div>
+
+                  {/* 删除装备列表 */}
+                  <div>
+                    <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>删除装备</p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {(data?.items ?? []).map(item => (
+                        <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 10, background: 'var(--card)', border: '1.5px solid var(--border)' }}>
+                          <span style={{ flex: 1, fontSize: 14 }}>{item.name}</span>
+                          <span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{item.category}</span>
+                          {confirmDeleteId === item.id ? (
+                            <>
+                              <button
+                                type="button"
+                                className="ghost-btn"
+                                style={{ color: '#e05a5a', borderColor: '#e05a5a55', minWidth: 72 }}
+                                disabled={deletingId === item.id}
+                                onClick={() => handleDelete(item.id)}
+                              >
+                                {deletingId === item.id ? '删除中...' : '确认删除'}
+                              </button>
+                              <button
+                                type="button"
+                                className="ghost-btn"
+                                onClick={() => setConfirmDeleteId(null)}
+                              >
+                                取消
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              className="ghost-btn"
+                              style={{ color: 'var(--muted-foreground)' }}
+                              onClick={() => setConfirmDeleteId(item.id)}
+                            >
+                              删除
+                            </button>
+                          )}
+                        </div>
+                      ))}
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      <label style={{ fontSize: 13, fontWeight: 600 }}>分类</label>
-                      <select
-                        value={addForm.category}
-                        onChange={e => setAddForm(f => ({ ...f, category: e.target.value }))}
-                        style={inputStyle}
-                      >
-                        {categoryOrder.map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      <label style={{ fontSize: 13, fontWeight: 600 }}>总数量</label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={addForm.quantity}
-                        onChange={e => setAddForm(f => ({ ...f, quantity: e.target.value }))}
-                        style={inputStyle}
-                      />
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      <label style={{ fontSize: 13, fontWeight: 600 }}>备注</label>
-                      <input
-                        value={addForm.note}
-                        onChange={e => setAddForm(f => ({ ...f, note: e.target.value }))}
-                        placeholder="可选"
-                        style={inputStyle}
-                      />
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-                      <button type="submit" className="primary-btn role-moku" disabled={adding} style={{ width: '100%' }}>
-                        {adding ? '添加中...' : '确认添加'}
-                      </button>
-                    </div>
-                  </form>
+                  </div>
                 </div>
               )}
             </article>
@@ -318,27 +380,7 @@ export default function CampClaimPage() {
                             </div>
 
                             {/* 数量控制区 */}
-                            <div style={{ margin: '12px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                              {/* 总数量调整 */}
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <span style={{ fontSize: 12, color: 'var(--muted-foreground)', flex: 1 }}>总数量</span>
-                                <div style={counterStyle}>
-                                  <button
-                                    type="button"
-                                    style={counterBtnStyle}
-                                    disabled={item.quantity <= Math.max(1, claimed) || pendingKey === `qty-${item.id}`}
-                                    onClick={() => handleSetQuantity(item.id, item.quantity - 1)}
-                                  >−</button>
-                                  <span style={{ minWidth: 24, textAlign: 'center', fontSize: 14, fontWeight: 600 }}>{item.quantity}</span>
-                                  <button
-                                    type="button"
-                                    style={counterBtnStyle}
-                                    disabled={pendingKey === `qty-${item.id}`}
-                                    onClick={() => handleSetQuantity(item.id, item.quantity + 1)}
-                                  >+</button>
-                                </div>
-                              </div>
-
+                            <div style={{ margin: '14px 0', display: 'flex', flexDirection: 'column', gap: 10 }}>
                               {/* 榫叔认领数 */}
                               <RoleCounter
                                 label={roleLabels.moku}
@@ -364,23 +406,9 @@ export default function CampClaimPage() {
                               {/* 剩余提示 */}
                               {remaining > 0 && (
                                 <p style={{ fontSize: 11, color: 'var(--muted-foreground)', margin: 0, textAlign: 'right' }}>
-                                  还剩 {remaining} 个未认领
+                                  共 {item.quantity} 个，还剩 {remaining} 未认领
                                 </p>
                               )}
-                            </div>
-
-                            <div className="divider" />
-
-                            <div className="claim-actions">
-                              <button
-                                type="button"
-                                className="ghost-btn"
-                                onClick={() => handleDelete(item.id)}
-                                disabled={deletingId === item.id}
-                                style={{ color: '#e05a5a', borderColor: '#e05a5a33' }}
-                              >
-                                {deletingId === item.id ? '删除中...' : '删除物品'}
-                              </button>
                             </div>
                           </div>
                         </article>
@@ -427,7 +455,7 @@ function RoleCounter({
           disabled={value <= 0 || isPending}
           onClick={() => onDelta(-1)}
         >−</button>
-        <span style={{ minWidth: 24, textAlign: 'center', fontSize: 14, fontWeight: 600 }}>{value}</span>
+        <span style={{ minWidth: 32, textAlign: 'center', fontSize: 16, fontWeight: 700 }}>{value}</span>
         <button
           type="button"
           style={counterBtnStyle}
@@ -451,24 +479,24 @@ const inputStyle: React.CSSProperties = {
 const counterStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
-  gap: 4,
+  gap: 2,
   background: 'var(--card)',
   border: '1.5px solid var(--border)',
-  borderRadius: 8,
-  padding: '2px 6px',
+  borderRadius: 10,
+  padding: '3px 6px',
 }
 
 const counterBtnStyle: React.CSSProperties = {
-  width: 24,
-  height: 24,
+  width: 36,
+  height: 36,
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  borderRadius: 6,
+  borderRadius: 8,
   border: 'none',
   background: 'transparent',
   cursor: 'pointer',
-  fontSize: 16,
+  fontSize: 22,
   fontWeight: 700,
   color: 'var(--foreground)',
   lineHeight: 1,
