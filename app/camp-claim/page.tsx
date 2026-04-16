@@ -8,6 +8,9 @@ type Item = {
   name: string
   category: string
   note: string
+  quantity: number
+  claimed_moku: number
+  claimed_shuan: number
   claimed_by: Role | ''
   sort_order: number
   updated_at?: string
@@ -27,14 +30,13 @@ type ApiPayload = {
 const categoryOrder = ['大件装备', '照明电源', '做饭装备', '吃食补给', '应急物资', '亲子物资']
 
 export default function CampClaimPage() {
-  const [selectedRole, setSelectedRole] = useState<Role>('moku')
   const [data, setData] = useState<ApiPayload | null>(null)
   const [loading, setLoading] = useState(true)
-  const [submittingId, setSubmittingId] = useState<string | null>(null)
+  const [pendingKey, setPendingKey] = useState<string | null>(null) // `${id}-${role}-${delta}` or `qty-${id}`
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [showAddForm, setShowAddForm] = useState(false)
-  const [addForm, setAddForm] = useState({ name: '', category: '大件装备', note: '' })
+  const [addForm, setAddForm] = useState({ name: '', category: '大件装备', note: '', quantity: '1' })
   const [adding, setAdding] = useState(false)
 
   async function refresh() {
@@ -50,26 +52,44 @@ export default function CampClaimPage() {
     setLoading(false)
   }
 
-  useEffect(() => {
-    refresh()
-  }, [])
+  useEffect(() => { refresh() }, [])
 
-  async function handleClaim(itemId: string, role: Role | '') {
-    setSubmittingId(itemId)
+  // 按 delta +1/-1 调整某个角色的认领数量
+  async function handleDelta(itemId: string, role: Role, delta: 1 | -1) {
+    const key = `${itemId}-${role}-${delta}`
+    setPendingKey(key)
     const res = await fetch('/api/camp-claim', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: itemId, role }),
+      body: JSON.stringify({ id: itemId, role, delta }),
     })
     const json = await res.json()
     if (!res.ok) {
       setError(json.error || '提交失败')
-      setSubmittingId(null)
-      return
+    } else {
+      setData(json as ApiPayload)
+      setError('')
     }
-    setData(json as ApiPayload)
-    setError('')
-    setSubmittingId(null)
+    setPendingKey(null)
+  }
+
+  // 调整物品总数量
+  async function handleSetQuantity(itemId: string, quantity: number) {
+    const key = `qty-${itemId}`
+    setPendingKey(key)
+    const res = await fetch('/api/camp-claim', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'set_quantity', id: itemId, quantity }),
+    })
+    const json = await res.json()
+    if (!res.ok) {
+      setError(json.error || '修改失败')
+    } else {
+      setData(json as ApiPayload)
+      setError('')
+    }
+    setPendingKey(null)
   }
 
   async function handleDelete(itemId: string) {
@@ -82,11 +102,10 @@ export default function CampClaimPage() {
     const json = await res.json()
     if (!res.ok) {
       setError(json.error || '删除失败')
-      setDeletingId(null)
-      return
+    } else {
+      setData(json as ApiPayload)
+      setError('')
     }
-    setData(json as ApiPayload)
-    setError('')
     setDeletingId(null)
   }
 
@@ -97,19 +116,22 @@ export default function CampClaimPage() {
     const res = await fetch('/api/camp-claim', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'add', ...addForm }),
+      body: JSON.stringify({
+        action: 'add',
+        ...addForm,
+        quantity: Math.max(1, parseInt(addForm.quantity) || 1),
+      }),
     })
     const json = await res.json()
     if (!res.ok) {
       setError(json.error || '添加失败')
-      setAdding(false)
-      return
+    } else {
+      setData(json as ApiPayload)
+      setError('')
+      setShowAddForm(false)
+      setAddForm({ name: '', category: '大件装备', note: '', quantity: '1' })
     }
-    setData(json as ApiPayload)
-    setError('')
     setAdding(false)
-    setShowAddForm(false)
-    setAddForm({ name: '', category: '大件装备', note: '' })
   }
 
   const grouped = useMemo(() => {
@@ -123,6 +145,8 @@ export default function CampClaimPage() {
     return [...map.entries()].filter(([, items]) => items.length > 0)
   }, [data])
 
+  const roleLabels = data?.roleLabels ?? { moku: '榫叔', shuan: '栓宝' }
+
   return (
     <main className="page-shell">
       <div className="paper-grid" />
@@ -134,11 +158,10 @@ export default function CampClaimPage() {
                 <div className="eyebrow">/camp-claim</div>
                 <h1 className="panel-title" style={{ fontSize: 'clamp(2.2rem, 6vw, 4.5rem)' }}>露营装备认领板</h1>
                 <p className="panel-copy" style={{ maxWidth: 760 }}>
-                  我把界面整体重做成更像"户外手册"的感觉，不是普通表格工具。核心目标不变，出发前快速分清楚谁带什么。
+                  出发前快速分清楚谁带什么。支持拆分数量，比如椅子各带几把。
                 </p>
               </div>
 
-              {/* PRD 摘要：嵌入像素徒步动画 */}
               <section className="panel" style={{ borderRadius: 24, background: '#0d0f14', boxShadow: 'none', overflow: 'hidden', padding: 0 }}>
                 <iframe
                   src="/hiking-canvas-embed.html"
@@ -152,98 +175,12 @@ export default function CampClaimPage() {
 
           {error ? <div className="error-box">{error}</div> : null}
 
-          {/* 添加装备 */}
-          <section className="panel" style={{ marginBottom: 0 }}>
-            <div className="panel-inner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
-              <div>
-                <h2 style={{ margin: 0, fontSize: 18 }}>装备清单管理</h2>
-                <p className="panel-copy" style={{ marginTop: 4 }}>添加新装备或删除不需要的物资。</p>
-              </div>
-              <button
-                type="button"
-                className="primary-btn role-moku"
-                style={{ minWidth: 120 }}
-                onClick={() => setShowAddForm(v => !v)}
-              >
-                {showAddForm ? '取消添加' : '+ 添加装备'}
-              </button>
-            </div>
-
-            {showAddForm && (
-              <div className="panel-inner" style={{ borderTop: '1px solid var(--border)', paddingTop: 20 }}>
-                <form onSubmit={handleAdd} style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <label style={{ fontSize: 13, fontWeight: 600 }}>装备名称 *</label>
-                    <input
-                      required
-                      value={addForm.name}
-                      onChange={e => setAddForm(f => ({ ...f, name: e.target.value }))}
-                      placeholder="如：睡袋"
-                      style={{ padding: '8px 12px', borderRadius: 8, border: '1.5px solid var(--border)', fontSize: 14, background: 'var(--card)', color: 'var(--foreground)' }}
-                    />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <label style={{ fontSize: 13, fontWeight: 600 }}>分类</label>
-                    <select
-                      value={addForm.category}
-                      onChange={e => setAddForm(f => ({ ...f, category: e.target.value }))}
-                      style={{ padding: '8px 12px', borderRadius: 8, border: '1.5px solid var(--border)', fontSize: 14, background: 'var(--card)', color: 'var(--foreground)' }}
-                    >
-                      {categoryOrder.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <label style={{ fontSize: 13, fontWeight: 600 }}>备注</label>
-                    <input
-                      value={addForm.note}
-                      onChange={e => setAddForm(f => ({ ...f, note: e.target.value }))}
-                      placeholder="可选"
-                      style={{ padding: '8px 12px', borderRadius: 8, border: '1.5px solid var(--border)', fontSize: 14, background: 'var(--card)', color: 'var(--foreground)' }}
-                    />
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-                    <button
-                      type="submit"
-                      className="primary-btn role-moku"
-                      disabled={adding}
-                      style={{ width: '100%' }}
-                    >
-                      {adding ? '添加中...' : '确认添加'}
-                    </button>
-                  </div>
-                </form>
-              </div>
-            )}
-          </section>
-
+          {/* 认领进度 */}
           <section className="stat-grid">
             <article className="panel">
               <div className="panel-inner">
-                <h2 style={{ margin: 0, fontSize: 20 }}>当前操作角色</h2>
-                <p className="panel-copy" style={{ marginTop: 8 }}>先切换角色，再认领对应物资。</p>
-                <div className="role-switch" style={{ marginTop: 20 }}>
-                  {(data?.roles ?? ['moku', 'shuan']).map((role) => {
-                    const active = selectedRole === role
-                    return (
-                      <button
-                        key={role}
-                        type="button"
-                        data-role={role}
-                        className={`pill-btn ${active ? 'active' : ''}`}
-                        onClick={() => setSelectedRole(role)}
-                      >
-                        {data?.roleLabels?.[role] ?? role}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-            </article>
-
-            <article className="panel">
-              <div className="panel-inner">
                 <h2 style={{ margin: 0, fontSize: 20 }}>认领进度</h2>
-                <p className="panel-copy" style={{ marginTop: 8 }}>谁拿得多，谁还没分到，一眼就够。</p>
+                <p className="panel-copy" style={{ marginTop: 8 }}>按物品单位统计，拆分的物品按各自数量累加。</p>
                 <div className="stat-grid" style={{ gridTemplateColumns: '1fr', marginTop: 18 }}>
                   <div className="stat-box" style={{ background: '#edf1f5' }}>
                     <h3>{data?.summary.moku ?? 0}</h3>
@@ -259,6 +196,75 @@ export default function CampClaimPage() {
                   </div>
                 </div>
               </div>
+            </article>
+
+            {/* 添加装备 */}
+            <article className="panel">
+              <div className="panel-inner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
+                <div>
+                  <h2 style={{ margin: 0, fontSize: 20 }}>装备管理</h2>
+                  <p className="panel-copy" style={{ marginTop: 4 }}>添加新装备，可设置总数量。</p>
+                </div>
+                <button
+                  type="button"
+                  className="primary-btn role-moku"
+                  style={{ minWidth: 120 }}
+                  onClick={() => setShowAddForm(v => !v)}
+                >
+                  {showAddForm ? '取消' : '+ 添加装备'}
+                </button>
+              </div>
+
+              {showAddForm && (
+                <div className="panel-inner" style={{ borderTop: '1px solid var(--border)', paddingTop: 20 }}>
+                  <form onSubmit={handleAdd} style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <label style={{ fontSize: 13, fontWeight: 600 }}>装备名称 *</label>
+                      <input
+                        required
+                        value={addForm.name}
+                        onChange={e => setAddForm(f => ({ ...f, name: e.target.value }))}
+                        placeholder="如：睡袋"
+                        style={inputStyle}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <label style={{ fontSize: 13, fontWeight: 600 }}>分类</label>
+                      <select
+                        value={addForm.category}
+                        onChange={e => setAddForm(f => ({ ...f, category: e.target.value }))}
+                        style={inputStyle}
+                      >
+                        {categoryOrder.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <label style={{ fontSize: 13, fontWeight: 600 }}>总数量</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={addForm.quantity}
+                        onChange={e => setAddForm(f => ({ ...f, quantity: e.target.value }))}
+                        style={inputStyle}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <label style={{ fontSize: 13, fontWeight: 600 }}>备注</label>
+                      <input
+                        value={addForm.note}
+                        onChange={e => setAddForm(f => ({ ...f, note: e.target.value }))}
+                        placeholder="可选"
+                        style={inputStyle}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                      <button type="submit" className="primary-btn role-moku" disabled={adding} style={{ width: '100%' }}>
+                        {adding ? '添加中...' : '确认添加'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
             </article>
           </section>
 
@@ -282,8 +288,12 @@ export default function CampClaimPage() {
 
                   <div className="card-grid">
                     {items.map((item) => {
-                      const claimed = item.claimed_by
-                      const claimedLabel = claimed ? data?.roleLabels?.[claimed] : '未认领'
+                      const claimed = item.claimed_moku + item.claimed_shuan
+                      const remaining = item.quantity - claimed
+                      const isSplit = item.claimed_moku > 0 && item.claimed_shuan > 0
+                      const isFullyClaimed = remaining === 0
+                      const isMulti = item.quantity > 1
+
                       return (
                         <article key={item.id} className="claim-card">
                           <div className="claim-card-inner">
@@ -292,7 +302,71 @@ export default function CampClaimPage() {
                                 <h3>{item.name}</h3>
                                 <p className="claim-note">{item.note || '暂时没有备注'}</p>
                               </div>
-                              <div className={`claim-badge ${claimed ? `role-${claimed}` : ''}`}>{claimedLabel}</div>
+                              {/* 状态徽章 */}
+                              {isSplit ? (
+                                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                                  <span className="claim-badge role-moku">{roleLabels.moku}×{item.claimed_moku}</span>
+                                  <span className="claim-badge role-shuan">{roleLabels.shuan}×{item.claimed_shuan}</span>
+                                </div>
+                              ) : (
+                                <div className={`claim-badge ${isFullyClaimed ? `role-${item.claimed_by}` : ''}`}>
+                                  {isFullyClaimed
+                                    ? (item.claimed_moku > 0 ? roleLabels.moku : roleLabels.shuan) + (isMulti ? `×${claimed}` : '')
+                                    : '未认领'}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* 数量控制区 */}
+                            <div style={{ margin: '12px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                              {/* 总数量调整 */}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <span style={{ fontSize: 12, color: 'var(--muted-foreground)', flex: 1 }}>总数量</span>
+                                <div style={counterStyle}>
+                                  <button
+                                    type="button"
+                                    style={counterBtnStyle}
+                                    disabled={item.quantity <= Math.max(1, claimed) || pendingKey === `qty-${item.id}`}
+                                    onClick={() => handleSetQuantity(item.id, item.quantity - 1)}
+                                  >−</button>
+                                  <span style={{ minWidth: 24, textAlign: 'center', fontSize: 14, fontWeight: 600 }}>{item.quantity}</span>
+                                  <button
+                                    type="button"
+                                    style={counterBtnStyle}
+                                    disabled={pendingKey === `qty-${item.id}`}
+                                    onClick={() => handleSetQuantity(item.id, item.quantity + 1)}
+                                  >+</button>
+                                </div>
+                              </div>
+
+                              {/* 榫叔认领数 */}
+                              <RoleCounter
+                                label={roleLabels.moku}
+                                role="moku"
+                                value={item.claimed_moku}
+                                max={item.quantity - item.claimed_shuan}
+                                pending={pendingKey}
+                                itemId={item.id}
+                                onDelta={(d) => handleDelta(item.id, 'moku', d)}
+                              />
+
+                              {/* 栓宝认领数 */}
+                              <RoleCounter
+                                label={roleLabels.shuan}
+                                role="shuan"
+                                value={item.claimed_shuan}
+                                max={item.quantity - item.claimed_moku}
+                                pending={pendingKey}
+                                itemId={item.id}
+                                onDelta={(d) => handleDelta(item.id, 'shuan', d)}
+                              />
+
+                              {/* 剩余提示 */}
+                              {remaining > 0 && (
+                                <p style={{ fontSize: 11, color: 'var(--muted-foreground)', margin: 0, textAlign: 'right' }}>
+                                  还剩 {remaining} 个未认领
+                                </p>
+                              )}
                             </div>
 
                             <div className="divider" />
@@ -300,30 +374,12 @@ export default function CampClaimPage() {
                             <div className="claim-actions">
                               <button
                                 type="button"
-                                className={`primary-btn role-${selectedRole}`}
-                                onClick={() => handleClaim(item.id, selectedRole)}
-                                disabled={submittingId === item.id || deletingId === item.id}
-                              >
-                                {submittingId === item.id ? '提交中...' : `由${data?.roleLabels?.[selectedRole] ?? selectedRole}认领`}
-                              </button>
-                              {claimed ? (
-                                <button
-                                  type="button"
-                                  className="ghost-btn"
-                                  onClick={() => handleClaim(item.id, '')}
-                                  disabled={submittingId === item.id || deletingId === item.id}
-                                >
-                                  取消认领
-                                </button>
-                              ) : null}
-                              <button
-                                type="button"
                                 className="ghost-btn"
                                 onClick={() => handleDelete(item.id)}
-                                disabled={submittingId === item.id || deletingId === item.id}
+                                disabled={deletingId === item.id}
                                 style={{ color: '#e05a5a', borderColor: '#e05a5a33' }}
                               >
-                                {deletingId === item.id ? '删除中...' : '删除'}
+                                {deletingId === item.id ? '删除中...' : '删除物品'}
                               </button>
                             </div>
                           </div>
@@ -339,4 +395,81 @@ export default function CampClaimPage() {
       </div>
     </main>
   )
+}
+
+// 单个角色的 +/- 计数器行
+function RoleCounter({
+  label, role, value, max, pending, itemId, onDelta,
+}: {
+  label: string
+  role: 'moku' | 'shuan'
+  value: number
+  max: number
+  pending: string | null
+  itemId: string
+  onDelta: (d: 1 | -1) => void
+}) {
+  const isPending = pending?.startsWith(itemId)
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <span style={{
+        fontSize: 12,
+        fontWeight: 600,
+        flex: 1,
+        color: role === 'moku' ? '#4a7fa5' : '#c49a28',
+      }}>
+        {label}
+      </span>
+      <div style={counterStyle}>
+        <button
+          type="button"
+          style={counterBtnStyle}
+          disabled={value <= 0 || isPending}
+          onClick={() => onDelta(-1)}
+        >−</button>
+        <span style={{ minWidth: 24, textAlign: 'center', fontSize: 14, fontWeight: 600 }}>{value}</span>
+        <button
+          type="button"
+          style={counterBtnStyle}
+          disabled={value >= max || isPending}
+          onClick={() => onDelta(1)}
+        >+</button>
+      </div>
+    </div>
+  )
+}
+
+const inputStyle: React.CSSProperties = {
+  padding: '8px 12px',
+  borderRadius: 8,
+  border: '1.5px solid var(--border)',
+  fontSize: 14,
+  background: 'var(--card)',
+  color: 'var(--foreground)',
+}
+
+const counterStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 4,
+  background: 'var(--card)',
+  border: '1.5px solid var(--border)',
+  borderRadius: 8,
+  padding: '2px 6px',
+}
+
+const counterBtnStyle: React.CSSProperties = {
+  width: 24,
+  height: 24,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  borderRadius: 6,
+  border: 'none',
+  background: 'transparent',
+  cursor: 'pointer',
+  fontSize: 16,
+  fontWeight: 700,
+  color: 'var(--foreground)',
+  lineHeight: 1,
 }
