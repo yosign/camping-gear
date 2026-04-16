@@ -58,6 +58,35 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
+    const { action } = body as { action?: string }
+
+    // 添加新装备
+    if (action === 'add') {
+      const { name, category, note } = body as { name?: string; category?: string; note?: string }
+      if (!name || !category) {
+        return NextResponse.json({ error: '缺少装备名称或分类' }, { status: 400 })
+      }
+      const supabase = getSupabaseClient()
+      const { data: maxData } = await supabase
+        .from('camp_claim_items')
+        .select('sort_order')
+        .order('sort_order', { ascending: false })
+        .limit(1)
+      const maxOrder = maxData?.[0]?.sort_order ?? 0
+      const newId = `item_${Date.now()}`
+      const { error } = await supabase.from('camp_claim_items').insert({
+        id: newId,
+        name,
+        category,
+        note: note ?? '',
+        claimed_by: '',
+        sort_order: maxOrder + 10,
+      })
+      if (error) throw error
+      return NextResponse.json(await fetchPayload())
+    }
+
+    // 认领装备
     const { id, role } = body as { id?: string; role?: CampRole }
 
     if (!id) {
@@ -79,6 +108,33 @@ export async function POST(request: Request) {
     return NextResponse.json(await fetchPayload())
   } catch (error) {
     console.error('camp-claim POST failed:', error)
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : 'Supabase request failed',
+        detail: error,
+      },
+      { status: 500 }
+    )
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const body = await request.json()
+    const { id } = body as { id?: string }
+
+    if (!id) {
+      return NextResponse.json({ error: '缺少物资 ID' }, { status: 400 })
+    }
+
+    const supabase = getSupabaseClient()
+    const { error } = await supabase.from('camp_claim_items').delete().eq('id', id)
+
+    if (error) throw error
+
+    return NextResponse.json(await fetchPayload())
+  } catch (error) {
+    console.error('camp-claim DELETE failed:', error)
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : 'Supabase request failed',

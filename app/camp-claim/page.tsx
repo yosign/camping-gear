@@ -31,7 +31,11 @@ export default function CampClaimPage() {
   const [data, setData] = useState<ApiPayload | null>(null)
   const [loading, setLoading] = useState(true)
   const [submittingId, setSubmittingId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const [error, setError] = useState('')
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [addForm, setAddForm] = useState({ name: '', category: '大件装备', note: '' })
+  const [adding, setAdding] = useState(false)
 
   async function refresh() {
     const res = await fetch('/api/camp-claim', { cache: 'no-store' })
@@ -66,6 +70,46 @@ export default function CampClaimPage() {
     setData(json as ApiPayload)
     setError('')
     setSubmittingId(null)
+  }
+
+  async function handleDelete(itemId: string) {
+    setDeletingId(itemId)
+    const res = await fetch('/api/camp-claim', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: itemId }),
+    })
+    const json = await res.json()
+    if (!res.ok) {
+      setError(json.error || '删除失败')
+      setDeletingId(null)
+      return
+    }
+    setData(json as ApiPayload)
+    setError('')
+    setDeletingId(null)
+  }
+
+  async function handleAdd(e: React.FormEvent) {
+    e.preventDefault()
+    if (!addForm.name.trim()) return
+    setAdding(true)
+    const res = await fetch('/api/camp-claim', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'add', ...addForm }),
+    })
+    const json = await res.json()
+    if (!res.ok) {
+      setError(json.error || '添加失败')
+      setAdding(false)
+      return
+    }
+    setData(json as ApiPayload)
+    setError('')
+    setAdding(false)
+    setShowAddForm(false)
+    setAddForm({ name: '', category: '大件装备', note: '' })
   }
 
   const grouped = useMemo(() => {
@@ -107,6 +151,70 @@ export default function CampClaimPage() {
           </section>
 
           {error ? <div className="error-box">{error}</div> : null}
+
+          {/* 添加装备 */}
+          <section className="panel" style={{ marginBottom: 0 }}>
+            <div className="panel-inner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 18 }}>装备清单管理</h2>
+                <p className="panel-copy" style={{ marginTop: 4 }}>添加新装备或删除不需要的物资。</p>
+              </div>
+              <button
+                type="button"
+                className="primary-btn role-moku"
+                style={{ minWidth: 120 }}
+                onClick={() => setShowAddForm(v => !v)}
+              >
+                {showAddForm ? '取消添加' : '+ 添加装备'}
+              </button>
+            </div>
+
+            {showAddForm && (
+              <div className="panel-inner" style={{ borderTop: '1px solid var(--border)', paddingTop: 20 }}>
+                <form onSubmit={handleAdd} style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <label style={{ fontSize: 13, fontWeight: 600 }}>装备名称 *</label>
+                    <input
+                      required
+                      value={addForm.name}
+                      onChange={e => setAddForm(f => ({ ...f, name: e.target.value }))}
+                      placeholder="如：睡袋"
+                      style={{ padding: '8px 12px', borderRadius: 8, border: '1.5px solid var(--border)', fontSize: 14, background: 'var(--card)', color: 'var(--foreground)' }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <label style={{ fontSize: 13, fontWeight: 600 }}>分类</label>
+                    <select
+                      value={addForm.category}
+                      onChange={e => setAddForm(f => ({ ...f, category: e.target.value }))}
+                      style={{ padding: '8px 12px', borderRadius: 8, border: '1.5px solid var(--border)', fontSize: 14, background: 'var(--card)', color: 'var(--foreground)' }}
+                    >
+                      {categoryOrder.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <label style={{ fontSize: 13, fontWeight: 600 }}>备注</label>
+                    <input
+                      value={addForm.note}
+                      onChange={e => setAddForm(f => ({ ...f, note: e.target.value }))}
+                      placeholder="可选"
+                      style={{ padding: '8px 12px', borderRadius: 8, border: '1.5px solid var(--border)', fontSize: 14, background: 'var(--card)', color: 'var(--foreground)' }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                    <button
+                      type="submit"
+                      className="primary-btn role-moku"
+                      disabled={adding}
+                      style={{ width: '100%' }}
+                    >
+                      {adding ? '添加中...' : '确认添加'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+          </section>
 
           <section className="stat-grid">
             <article className="panel">
@@ -194,7 +302,7 @@ export default function CampClaimPage() {
                                 type="button"
                                 className={`primary-btn role-${selectedRole}`}
                                 onClick={() => handleClaim(item.id, selectedRole)}
-                                disabled={submittingId === item.id}
+                                disabled={submittingId === item.id || deletingId === item.id}
                               >
                                 {submittingId === item.id ? '提交中...' : `由${data?.roleLabels?.[selectedRole] ?? selectedRole}认领`}
                               </button>
@@ -203,11 +311,20 @@ export default function CampClaimPage() {
                                   type="button"
                                   className="ghost-btn"
                                   onClick={() => handleClaim(item.id, '')}
-                                  disabled={submittingId === item.id}
+                                  disabled={submittingId === item.id || deletingId === item.id}
                                 >
                                   取消认领
                                 </button>
                               ) : null}
+                              <button
+                                type="button"
+                                className="ghost-btn"
+                                onClick={() => handleDelete(item.id)}
+                                disabled={submittingId === item.id || deletingId === item.id}
+                                style={{ color: '#e05a5a', borderColor: '#e05a5a33' }}
+                              >
+                                {deletingId === item.id ? '删除中...' : '删除'}
+                              </button>
                             </div>
                           </div>
                         </article>
