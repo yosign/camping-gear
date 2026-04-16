@@ -42,17 +42,19 @@ function _getPixelCanvas(img, gw, gh) {
 function pixelDraw(src, sx, sy, sw, sh, dx, dy, dw, dh) {
   const gw = Math.max(1, Math.round(dw / CHAR_SCALE));
   const gh = Math.max(1, Math.round(dh / CHAR_SCALE));
+  dw = gw * CHAR_SCALE;
+  dh = gh * CHAR_SCALE;
   const gr = _getPixelCanvas(src, gw, gh);
   if (!gr) return;
   const rx = gw / src.naturalWidth, ry = gh / src.naturalHeight;
   ctx.drawImage(gr,
     Math.round(sx*rx), Math.round(sy*ry),
     Math.max(1, Math.round(sw*rx)), Math.max(1, Math.round(sh*ry)),
-    Math.round(dx), Math.round(dy), Math.round(dw), Math.round(dh));
+    Math.floor(dx), Math.floor(dy), dw, dh);
 }
 
 const L_GND_Y = 192, L_GND_H = 64;
-const CHAR_GND = 208;
+const CHAR_GND = 228;
 
 const ASSET  = './assets/';
 const WIDE   = ASSET + 'scenes/wide/';
@@ -109,7 +111,7 @@ let scrollX   = 0;
 let animFrame = 0;
 let animTimer = 0;
 let lastTime  = 0;
-const speed   = 60;
+const speed   = 40;
 let sceneTimer = 0;
 const SCENE_INTERVAL = 8; // 每 8 秒换一个场景
 
@@ -161,7 +163,7 @@ function drawGround(img, groundOffset) {
 }
 
 function drawSpriteLayer(instances, imgs) {
-  const off = mod(scrollX * SPRITE_SPEED, STRIP_W);
+  const off = Math.floor(mod(scrollX * SPRITE_SPEED, STRIP_W));
   for (const inst of instances) {
     const img = imgs[inst.imgIdx];
     if (!img || !img.complete || !img.naturalWidth) continue;
@@ -170,7 +172,7 @@ function drawSpriteLayer(instances, imgs) {
       if (vx > W + inst.h || vx < -inst.h * 2) continue;
       const drawH = Math.round(inst.h);
       const drawW = Math.round(img.width * inst.h / img.height);
-      const drawX = Math.round(vx - drawW / 2);
+      const drawX = Math.floor(vx - drawW / 2);
       const drawY = inst.groundY - drawH;
       pixelDraw(img, 0, 0, img.width, img.height, drawX, drawY, drawW, drawH);
     }
@@ -190,8 +192,14 @@ function draw() {
     const cX = Math.round(W / 2 - cW / 2);
     const bob = (animFrame % 2 === 0) ? 0 : -1;
     const cY = CHAR_GND - cH + bob;
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.fillRect(cX + 6, CHAR_GND, cW - 12, 2);
+    const scx = cX + Math.floor(cW / 2);
+    const sw  = Math.floor(cW * 0.72);
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    const rows = [0.45, 0.75, 1.0, 0.75, 0.45];
+    rows.forEach((r, i) => {
+      const w = Math.max(2, Math.floor(sw * r));
+      ctx.fillRect(scx - Math.floor(w / 2), CHAR_GND + i, w, 1);
+    });
     ctx.drawImage(sprite, animFrame * FRAME_W, WALK_Y, FRAME_W, WALK_H, cX, cY, cW, cH);
   }
 }
