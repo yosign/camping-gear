@@ -1,0 +1,40 @@
+{
+  "pages": {
+    "/_not-found/page": [
+      "static/chunks/webpack-d06fdd879514fd8c.js",
+      "static/chunks/4bd1b696-7437630bc5bdf9a0.js",
+      "static/chunks/684-02f7adea1028fe15.js",
+      "static/chunks/main-app-ae7f9918a7907342.js",
+      "static/chunks/app/_not-found/page-c8ffbb9600de8aac.js"
+    ],
+    "/layout": [
+      "static/chunks/webpack-d06fdd879514fd8c.js",
+      "static/chunks/4bd1b696-7437630bc5bdf9a0.js",
+      "static/chunks/684-02f7adea1028fe15.js",
+      "static/chunks/main-app-ae7f9918a7907342.js",
+      "static/css/d5af72e4c5b4ef04.css",
+      "static/chunks/app/layout-e77e745738dc7098.js"
+    ],
+    "/api/camp-claim/route": [
+      "static/chunks/webpack-d06fdd879514fd8c.js",
+      "static/chunks/4bd1b696-7437630bc5bdf9a0.js",
+      "static/chunks/684-02f7adea1028fe15.js",
+      "static/chunks/main-app-ae7f9918a7907342.js",
+      "static/chunks/app/api/camp-claim/route-e8a566030df5be15.js"
+    ],
+    "/page": [
+      "static/chunks/webpack-d06fdd879514fd8c.js",
+      "static/chunks/4bd1b696-7437630bc5bdf9a0.js",
+      "static/chunks/684-02f7adea1028fe15.js",
+      "static/chunks/main-app-ae7f9918a7907342.js",
+      "static/chunks/app/page-702f542795a98d6f.js"
+    ],
+    "/camp-claim/page": [
+      "static/chunks/webpack-d06fdd879514fd8c.js",
+      "static/chunks/4bd1b696-7437630bc5bdf9a0.js",
+      "static/chunks/684-02f7adea1028fe15.js",
+      "static/chunks/main-app-ae7f9918a7907342.js",
+      "static/chunks/app/camp-claim/page-4e35ad5f7fdd9061.js"
+    ]
+  }
+}

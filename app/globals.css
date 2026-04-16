@@ -1,0 +1,245 @@
+:root {
+  --background: #f7f3ea;
+  --foreground: #1f2d3d;
+  --card: rgba(255, 251, 245, 0.92);
+  --card-foreground: #1f2d3d;
+  --muted: #ede5d8;
+  --muted-foreground: #667085;
+  --border: rgba(147, 111, 79, 0.2);
+  --primary: #d96d35;
+  --primary-foreground: #fffaf5;
+  --secondary: #efd88d;
+  --secondary-foreground: #1f2d3d;
+  --accent: #b7d8c3;
+  --accent-foreground: #1f2d3d;
+  --destructive: #d64646;
+  --radius: 24px;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--foreground);
+  background:
+    radial-gradient(circle at top left, rgba(255,255,255,0.92), transparent 26%),
+    radial-gradient(circle at bottom right, rgba(235,193,126,0.25), transparent 20%),
+    linear-gradient(180deg, rgba(255,255,255,0.6), rgba(247,243,234,0.95));
+  background-color: var(--background);
+  font-family: "SF Pro Display", "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+}
+
+a { color: inherit; text-decoration: none; }
+button { font: inherit; }
+
+.page-shell {
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+  padding: 24px 16px 40px;
+}
+
+.paper-grid {
+  position: absolute;
+  inset: 0;
+  opacity: 0.5;
+  background-image:
+    linear-gradient(rgba(148, 115, 84, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 115, 84, 0.08) 1px, transparent 1px);
+  background-size: 24px 24px;
+  pointer-events: none;
+}
+
+.grain-overlay::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.08;
+  background-image: radial-gradient(#7c6240 0.6px, transparent 0.6px);
+  background-size: 10px 10px;
+  mix-blend-mode: multiply;
+}
+
+.container {
+  position: relative;
+  max-width: 1180px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.panel {
+  border: 1px solid var(--border);
+  border-radius: 32px;
+  background: var(--card);
+  box-shadow: 0 24px 60px rgba(98, 69, 42, 0.12);
+  backdrop-filter: blur(14px);
+}
+
+.panel-inner { padding: 24px; }
+.panel-title { margin: 0; font-size: 28px; font-weight: 600; letter-spacing: -0.03em; }
+.panel-copy { margin: 12px 0 0; color: var(--muted-foreground); line-height: 1.8; }
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(217,109,53,0.1);
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.grid-hero {
+  display: grid;
+  gap: 24px;
+}
+
+.stat-grid, .card-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.stat-box {
+  border-radius: 20px;
+  padding: 18px;
+  text-align: center;
+}
+.stat-box h3 { margin: 0; font-size: 32px; }
+.stat-box p { margin: 8px 0 0; font-size: 12px; color: var(--muted-foreground); }
+
+.role-switch {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.pill-btn, .ghost-btn, .primary-btn {
+  border-radius: 999px;
+  border: 1px solid transparent;
+  transition: 0.2s ease;
+  cursor: pointer;
+}
+
+.pill-btn {
+  min-height: 48px;
+  padding: 0 22px;
+  background: #f0ece5;
+  color: var(--foreground);
+  border-color: var(--border);
+}
+.pill-btn.active[data-role="moku"] { background: #1f2d3d; color: white; }
+.pill-btn.active[data-role="shuan"] { background: #efd88d; color: #1f2d3d; }
+
+.primary-btn {
+  width: 100%;
+  min-height: 48px;
+  padding: 0 18px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+.primary-btn.role-moku { background: #1f2d3d; }
+.primary-btn.role-shuan { background: #efd88d; color: #1f2d3d; }
+.primary-btn:disabled, .ghost-btn:disabled { opacity: 0.6; cursor: wait; }
+
+.ghost-btn {
+  width: 100%;
+  min-height: 46px;
+  padding: 0 18px;
+  background: transparent;
+  border-color: var(--border);
+  color: var(--foreground);
+}
+
+.category-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.category-head h2 { margin: 0; font-size: 24px; }
+.category-head p { margin: 8px 0 0; color: var(--muted-foreground); font-size: 14px; }
+
+.count-badge {
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  padding: 8px 14px;
+  font-size: 14px;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+}
+
+.claim-card {
+  border: 1px solid var(--border);
+  border-radius: 28px;
+  background: rgba(255,251,245,0.96);
+  box-shadow: 0 18px 40px rgba(98, 69, 42, 0.09);
+}
+.claim-card-inner { padding: 22px; }
+.claim-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+.claim-header h3 { margin: 0; font-size: 22px; }
+.claim-note { margin: 10px 0 0; font-size: 14px; line-height: 1.7; color: var(--muted-foreground); }
+.claim-badge {
+  border-radius: 999px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
+.claim-badge.role-moku { background: #1f2d3d; color: white; border-color: #1f2d3d; }
+.claim-badge.role-shuan { background: #efd88d; color: #1f2d3d; border-color: #efd88d; }
+.claim-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.divider {
+  height: 1px;
+  margin-top: 16px;
+  background: rgba(147, 111, 79, 0.16);
+}
+
+.info-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: var(--muted-foreground);
+  line-height: 1.8;
+  font-size: 14px;
+}
+
+.error-box {
+  border: 1px solid rgba(214, 70, 70, 0.2);
+  background: rgba(214, 70, 70, 0.08);
+  color: var(--destructive);
+  padding: 14px 16px;
+  border-radius: 20px;
+}
+
+@media (min-width: 768px) {
+  .page-shell { padding: 40px 24px 60px; }
+  .panel-inner { padding: 32px; }
+  .grid-hero { grid-template-columns: 1.25fr 0.75fr; align-items: end; }
+  .stat-grid { grid-template-columns: 1fr 320px; }
+  .card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (min-width: 1200px) {
+  .card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
