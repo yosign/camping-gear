@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>像素徒步 Demo</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #111;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    font-family: 'Courier New', monospace;
+    gap: 16px;
+  }
+  canvas {
+    /* image-rendering: pixelated; */   /* pixel off */
+    /* image-rendering: crisp-edges; */ /* pixel off */
+    width: 1024px;
+    height: 512px;
+    display: block;
+  }
+  .controls {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  button {
+    background: #222;
+    color: #aaa;
+    border: 1px solid #444;
+    padding: 6px 14px;
+    cursor: pointer;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    transition: all 0.15s;
+  }
+  button:hover { background: #333; color: #fff; }
+  button.active { background: #2a5a8a; color: #fff; border-color: #4a8ac0; }
+  .info { color: #555; font-size: 11px; }
+</style>
+</head>
+<body>
+
+<canvas id="c" width="512" height="256"></canvas>
+
+<div class="controls">
+  <button class="active" onclick="switchScene(0)">🏔 山地草原</button>
+  <button onclick="switchScene(1)">🌸 樱花山丘</button>
+  <button onclick="switchScene(2)">🌲 阳光森林</button>
+  <button onclick="switchScene(3)">🌊 海崖</button>
+  <button onclick="switchScene(4)">⭐ 星空山</button>
+</div>
+<div class="info">space 暂停 | ← → 调速</div>
+
+<script>
+const W = 512, H = 256;
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+// ─── Sprite sheet ─────────────────────────────────────────────
+const FRAME_W    = 38;
+const WALK_Y     = 43;
+const WALK_H     = 36;
+const CHAR_SCALE = 2;
+const WALK_FRAMES = 4;
+const ANIM_SPD   = 0.13;
+
+// ─── Pixel-size alignment ─────────────────────────────────────
+// Pipeline (runs once per image×size, cached in WeakMap):
+//   1. NN downsample to game-res (dw/CHAR_SCALE × dh/CHAR_SCALE)
+// Per-frame: NN-upsample the cached canvas → zero pixel-work per frame.
+
+const _ppCache = new WeakMap();   // img → Map<"gwxgh", canvas>
+
+function _buildPixelCanvas(img, gw, gh) {
+  const c = document.createElement('canvas');
+  c.width = gw; c.height = gh;
+  const cx = c.getContext('2d');
+  cx.imageSmoothingEnabled = false;
+  cx.drawImage(img, 0, 0, gw, gh);   // NN downsample
+  return c;
+}
+
+function _getPixelCanvas(img, gw, gh) {
+  if (!_ppCache.has(img)) _ppCache.set(img, new Map());
+  const m = _ppCache.get(img);
+  const key = `${gw}x${gh}`;
+  if (!m.has(key)) m.set(key, _buildPixelCanvas(img, gw, gh));
+  return m.get(key);
+}
+
+function pixelDraw(src, sx, sy, sw, sh,   // source rect
+                   dx, dy, dw, dh) {      // dest rect on main canvas
+  const gw = Math.max(1, Math.round(dw / CHAR_SCALE));
+  const gh = Math.max(1, Math.round(dh / CHAR_SCALE));
+  // Snap dest to exact multiple of CHAR_SCALE so upscale is always exactly 2×
+  // Non-multiple causes uneven column widths that flicker as sprite moves
+  dw = gw * CHAR_SCALE;
+  dh = gh * CHAR_SCALE;
+  const gr = _getPixelCanvas(src, gw, gh);
+  if (!gr) return;
+  const rx = gw / src.naturalWidth, ry = gh / src.naturalHeight;
+  ctx.drawImage(gr,
+    Math.round(sx*rx), Math.round(sy*ry),
+    Math.max(1, Math.round(sw*rx)), Math.max(1, Math.round(sh*ry)),
+    Math.floor(dx), Math.floor(dy), dw, dh);
+}
+
+// ─── Layer layout ─────────────────────────────────────────────
+const L_GND_Y   = 192, L_GND_H   = 64;
+const CHAR_GND  = 228;   // character feet Y
+
+// ─── Assets ───────────────────────────────────────────────────
+const ASSET  = './assets/';
+const WIDE   = ASSET + 'scenes/wide/';
+const GROUND = ASSET + 'scenes/ground/';
+const SPR    = ASSET + 'scenes/sprites/';
+
+// ─── Scenes ───────────────────────────────────────────────────
+const SCENES = [
+  {
+    id:'B', name:'山地草原', fgColor:'#1a4018',
+    skyColor: '#7ab4d8', groundOffset: 0,
+    trees: ['B-tree-oak', 'B-tree-pine', 'B-tree-shrub'],
+    objects: ['B-obj-pole', 'B-obj-rock'],
+  },
+  {
+    id:'C', name:'樱花山丘', fgColor:'#3a2040',
+    skyColor: '#f0c8e0', groundOffset: 0,
+    trees: ['C-tree-cherry', 'C-tree-willow', 'C-tree-flbush'],
+    objects: ['C-obj-lantern', 'C-obj-fence'],
+  },
+  {
+    id:'E', name:'阳光森林', fgColor:'#0e2e10',
+    skyColor: '#a8d878', groundOffset: 0,
+    trees: ['E-tree-bigtree', 'E-tree-fern', 'E-tree-tallpine'],
+    objects: ['E-obj-stump', 'E-obj-mushroom'],
+  },
+  {
+    id:'F', name:'海崖',     fgColor:'#102820',
+    skyColor: '#60c8e0', groundOffset: 0,
+    trees: ['F-tree-palm', 'F-tree-seabush', 'F-tree-driftwood'],
+    objects: ['F-obj-pole', 'F-obj-anchor'],
+  },
+  {
+    id:'G', name:'星空山',   fgColor:'#05080f',
+    skyColor: '#080820', groundOffset: 0,
+    trees: ['G-tree-darkpine', 'G-tree-baretree', 'G-tree-snowpine'],
+    objects: ['G-obj-lantern', 'G-obj-snowrock'],
+  },
+];
+
+function loadImg(url) {
+  const img = new Image();
+  img.src = url;
+  return img;
+}
+
+const bgImgs     = SCENES.map(s => loadImg(WIDE   + `scene-${s.id}-wide.png`));
+const groundImgs = SCENES.map(s => loadImg(GROUND + `${s.id}-ground.png`));
+const sprite     = loadImg(ASSET + 'characters/male-sprite-transparent.png');
+
+// Load sprite images per scene (trees + objects)
+const sceneSprites = SCENES.map(s => {
+  const all = [...s.trees, ...s.objects];
+  return all.map(name => loadImg(SPR + name + '.png'));
+});
+
+// ─── Sprite instance layout ────────────────────────────────────
+// Each scene gets a fixed random layout of sprite instances
+// generated once per scene switch, scrolling at mid speed
+const RNG_SEED = 42;
+function seededRand(seed) {
+  // Simple LCG
+  let s = seed;
+  return () => { s = (s * 1664525 + 1013904223) & 0xffffffff; return (s >>> 0) / 0xffffffff; };
+}
+
+const STRIP_W = 2048;  // virtual width of the sprite strip (loops seamlessly)
+const SPRITE_SPEED = 0.72;  // same as old trees layer
+
+// Generate sprite instance positions per scene
+function genSpriteInstances(sceneIdx) {
+  const rng = seededRand(RNG_SEED + sceneIdx * 999);
+  const s = SCENES[sceneIdx];
+  const imgs = sceneSprites[sceneIdx];
+  const allKeys = [...s.trees, ...s.objects];
+  const instances = [];
+
+  // 18–24 sprites spread across STRIP_W
+  const count = 22;
+  for (let i = 0; i < count; i++) {
+    const x = Math.floor(rng() * STRIP_W);
+    const pick = Math.floor(rng() * allKeys.length);
+    const isObj = pick >= s.trees.length;
+    // Scale: trees 120–200px tall (≈2× character), objects 70–110px
+    const baseH = isObj ? (70 + rng() * 40) : (120 + rng() * 80);
+    // Ground Y: below canvas bottom so roots are cropped (natural look)
+    const groundY = 238 + Math.floor(rng() * 8);  // 238–246
+    instances.push({ x, imgIdx: pick, h: baseH, groundY });
+  }
+  // Sort by groundY so farther ones draw first (painter's algorithm)
+  instances.sort((a, b) => a.groundY - b.groundY);
+  return instances;
+}
+
+const spriteInstances = SCENES.map((_, i) => genSpriteInstances(i));
+
+// ─── State ────────────────────────────────────────────────────
+let sceneIdx  = 0;
+let scrollX   = 0;
+let animFrame = 0;
+let animTimer = 0;
+let lastTime  = 0;
+let speed     = 40;
+let paused    = false;
+
+// ─── Helpers ──────────────────────────────────────────────────
+function mod(n, m) { return ((n % m) + m) % m; }
+
+function tileBg(img, spd) {
+  if (!img.complete || !img.naturalWidth) return;
+  const tileW = Math.round(img.width * H / img.height);
+  // off 在 [0, 2*tileW) 内循环，对应"世界"已滚动多少
+  const off = mod(scrollX * spd, tileW * 2);
+  // 第一块的绝对块索引（世界坐标 k*tileW 对应屏幕 k*tileW - off）
+  const k0 = Math.floor(off / tileW);          // 0 或 1
+  const k1 = Math.ceil((off + W) / tileW);     // 最后一块
+  for (let k = k0; k <= k1; k++) {
+    const drawX = Math.round(k * tileW - off);
+    ctx.imageSmoothingEnabled = true;
+    if (k % 2 === 1) {                         // 奇数块：水平翻转
+      ctx.save();
+      ctx.imageSmoothingEnabled = true;
+      ctx.translate(drawX + tileW, 0);
+      ctx.scale(-1, 1);
+      // pixelDraw(img, 0, 0, img.width, img.height, 0, 0, tileW, H); // pixel off
+      ctx.drawImage(img, 0, 0, tileW, H);
+      ctx.restore();
+    } else {
+      // pixelDraw(img, 0, 0, img.width, img.height, drawX, 0, tileW, H); // pixel off
+      ctx.drawImage(img, drawX, 0, tileW, H);
+    }
+    ctx.imageSmoothingEnabled = false;
+  }
+}
+
+// Draw ground strip with mirror tiling (same as tileBg)
+// groundOffset: positive = shift down, negative = shift up
+function drawGround(img, groundOffset) {
+  if (!img.complete || !img.naturalWidth) return;
+  const gY = L_GND_Y + (groundOffset || 0);
+  const tileW = Math.round(img.width * L_GND_H / img.height);
+  const off = mod(scrollX, tileW * 2);
+  const k0 = Math.floor(off / tileW);
+  const k1 = Math.ceil((off + W) / tileW);
+  for (let k = k0; k <= k1; k++) {
+    const drawX = Math.round(k * tileW - off);
+    ctx.imageSmoothingEnabled = true;
+    if (k % 2 === 1) {
+      ctx.save();
+      ctx.imageSmoothingEnabled = true;
+      ctx.translate(drawX + tileW, 0);
+      ctx.scale(-1, 1);
+      // pixelDraw(img, 0, 0, img.width, img.height, 0, gY, tileW, L_GND_H); // pixel off
+      ctx.drawImage(img, 0, gY, tileW, L_GND_H);
+      ctx.restore();
+    } else {
+      // pixelDraw(img, 0, 0, img.width, img.height, drawX, gY, tileW, L_GND_H); // pixel off
+      ctx.drawImage(img, drawX, gY, tileW, L_GND_H);
+    }
+    ctx.imageSmoothingEnabled = false;
+  }
+}
+
+// Draw individual sprites from the virtual sprite strip
+function drawSpriteLayer(instances, imgs) {
+  const off = Math.floor(mod(scrollX * SPRITE_SPEED, STRIP_W)); // floor: no back-and-forth snap
+  for (const inst of instances) {
+    const img = imgs[inst.imgIdx];
+    if (!img || !img.complete || !img.naturalWidth) continue;
+    // Map virtual X to screen X
+    let vx = inst.x - off;
+    // Handle wrap-around: draw twice to cover seam
+    for (let rep = 0; rep < 2; rep++, vx += STRIP_W) {
+      if (vx > W + inst.h || vx < -inst.h * 2) continue;
+      const drawH = Math.round(inst.h);
+      const drawW = Math.round(img.width * inst.h / img.height);
+      const drawX = Math.floor(vx - drawW / 2); // floor: consistent pixel snap direction
+      const drawY = inst.groundY - drawH;
+      pixelDraw(img, 0, 0, img.width, img.height, drawX, drawY, drawW, drawH);
+    }
+  }
+}
+
+// ─── Draw ─────────────────────────────────────────────────────
+function draw() {
+  const s = SCENES[sceneIdx];
+
+  // 0. Sky background (solid color fallback shown behind bg image)
+  ctx.fillStyle = s.skyColor;
+  ctx.fillRect(0, 0, W, H);
+
+  // 1. Wide background (far, 0.45x)
+  tileBg(bgImgs[sceneIdx], 0.45);
+
+  // 2. Mid-ground: individual tree/object sprites (0.72x)
+  //    Draw those with lower groundY first (farther back), then closer ones
+  //    This is handled by sorted instances array
+  const instances = spriteInstances[sceneIdx];
+  const imgs = sceneSprites[sceneIdx];
+
+  // 2. Mid-ground sprites — ALL behind character
+  drawSpriteLayer(instances, imgs);
+
+  // 3. Ground strip (1.0x)
+  drawGround(groundImgs[sceneIdx], s.groundOffset);
+
+  // 4. Character (always in front of trees)
+  if (sprite.complete && sprite.naturalWidth) {
+    const cW = FRAME_W * CHAR_SCALE;
+    const cH = WALK_H  * CHAR_SCALE;
+    const cX = Math.round(W / 2 - cW / 2);
+    const bob = (animFrame % 2 === 0) ? 0 : -1;
+    const cY = CHAR_GND - cH + bob;
+
+    // Shadow — pixel ellipse (5 rows)
+    const scx = cX + Math.floor(cW / 2);
+    const sy  = CHAR_GND;
+    const sw  = Math.floor(cW * 0.72);
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    const rows = [0.45, 0.75, 1.0, 0.75, 0.45];
+    rows.forEach((r, i) => {
+      const w = Math.max(2, Math.floor(sw * r));
+      ctx.fillRect(scx - Math.floor(w / 2), sy + i, w, 1);
+    });
+
+    ctx.drawImage(sprite,
+      animFrame * FRAME_W, WALK_Y, FRAME_W, WALK_H,
+      cX, cY, cW, cH);
+  }
+
+}
+
+// ─── Loop ─────────────────────────────────────────────────────
+function loop(time) {
+  requestAnimationFrame(loop);
+  if (!sprite.complete) return;
+
+  const dt = Math.min((time - lastTime) / 1000, 0.05);
+  lastTime = time;
+
+  if (!paused) {
+    scrollX   += speed * dt;
+    animTimer += dt;
+    if (animTimer >= ANIM_SPD) {
+      animTimer -= ANIM_SPD;
+      animFrame = (animFrame + 1) % WALK_FRAMES;
+    }
+  }
+
+  ctx.clearRect(0, 0, W, H);
+  draw();
+}
+
+// ─── Controls ─────────────────────────────────────────────────
+function switchScene(idx) {
+  sceneIdx = idx;
+  document.querySelectorAll('.controls button').forEach((b, i) =>
+    b.classList.toggle('active', i === idx));
+}
+
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space')      { paused = !paused; e.preventDefault(); }
+  if (e.code === 'ArrowRight') speed = Math.min(speed + 20, 240);
+  if (e.code === 'ArrowLeft')  speed = Math.max(speed - 20, 20);
+});
+
+// ─── Start ────────────────────────────────────────────────────
+sprite.onload = () => requestAnimationFrame(t => { lastTime = t; loop(t); });
+if (sprite.complete) requestAnimationFrame(t => { lastTime = t; loop(t); });
+</script>
+</body>
+</html>
+
