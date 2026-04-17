@@ -115,24 +115,47 @@ export default function CampClaimPage() {
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault()
     if (!addForm.name.trim()) return
+
+    const qty = Math.max(1, parseInt(addForm.quantity) || 1)
+
+    // 乐观更新：先把新物品插入本地状态，失败了再回滚
+    const optimisticId = `optimistic_${Date.now()}`
+    const optimisticItem: Item = {
+      id: optimisticId,
+      name: addForm.name,
+      category: addForm.category,
+      note: addForm.note,
+      quantity: qty,
+      claimed_moku: 0,
+      claimed_shuan: 0,
+      claimed_by: '',
+      sort_order: 9999,
+    }
+    const prevData = data
+    setData(prev => prev ? {
+      ...prev,
+      items: [...prev.items, optimisticItem],
+      summary: { ...prev.summary, unclaimed: prev.summary.unclaimed + qty },
+    } : prev)
+    setShowAddForm(false)
+    setAddForm({ name: '', category: '大件装备', note: '', quantity: '1' })
     setAdding(true)
+
     const res = await fetch('/api/camp-claim', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'add',
-        ...addForm,
-        quantity: Math.max(1, parseInt(addForm.quantity) || 1),
-      }),
+      body: JSON.stringify({ action: 'add', ...addForm, quantity: qty }),
     })
     const json = await res.json()
     if (!res.ok) {
+      // 回滚
+      setData(prevData)
+      setShowAddForm(true)
+      setAddForm({ name: addForm.name, category: addForm.category, note: addForm.note, quantity: String(qty) })
       setError(json.error || '添加失败')
     } else {
       setData(json as ApiPayload)
       setError('')
-      setShowAddForm(false)
-      setAddForm({ name: '', category: '大件装备', note: '', quantity: '1' })
     }
     setAdding(false)
   }
@@ -438,28 +461,37 @@ function RoleCounter({
   onDelta: (d: 1 | -1) => void
 }) {
   const isPending = pending?.startsWith(itemId)
+  const accentColor = role === 'moku' ? '#4a7fa5' : '#c49a28'
+  const canAdd = value < max && !isPending
+  const canSub = value > 0 && !isPending
+
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <span style={{
-        fontSize: 12,
-        fontWeight: 600,
-        flex: 1,
-        color: role === 'moku' ? '#4a7fa5' : '#c49a28',
-      }}>
+      <span style={{ fontSize: 12, fontWeight: 600, flex: 1, color: accentColor }}>
         {label}
       </span>
       <div style={counterStyle}>
+        {/* − 按钮：低调，无背景 */}
         <button
           type="button"
-          style={counterBtnStyle}
-          disabled={value <= 0 || isPending}
+          style={{ ...counterBtnStyle, opacity: canSub ? 0.5 : 0.2, cursor: canSub ? 'pointer' : 'not-allowed' }}
+          disabled={!canSub}
           onClick={() => onDelta(-1)}
         >−</button>
+
         <span style={{ minWidth: 32, textAlign: 'center', fontSize: 16, fontWeight: 700 }}>{value}</span>
+
+        {/* + 按钮：强调，有填充背景 */}
         <button
           type="button"
-          style={counterBtnStyle}
-          disabled={value >= max || isPending}
+          style={{
+            ...counterBtnStyle,
+            background: canAdd ? accentColor : 'transparent',
+            color: canAdd ? '#fff' : 'var(--muted-foreground)',
+            opacity: canAdd ? 1 : 0.25,
+            cursor: canAdd ? 'pointer' : 'not-allowed',
+          }}
+          disabled={!canAdd}
           onClick={() => onDelta(1)}
         >+</button>
       </div>
