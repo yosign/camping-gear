@@ -150,10 +150,6 @@ export async function POST(request: Request) {
     if (newVal < 0) {
       return NextResponse.json({ error: '认领数量不能为负' }, { status: 400 })
     }
-    if (newVal + otherVal > cur.quantity) {
-      return NextResponse.json({ error: '超出物品总数量' }, { status: 400 })
-    }
-
     // 同步更新 claimed_by（兼容旧逻辑）
     const newMoku = role === 'moku' ? newVal : (cur.claimed_moku ?? 0)
     const newShuan = role === 'shuan' ? newVal : (cur.claimed_shuan ?? 0)

@@ -462,7 +462,7 @@ function RoleCounter({
 }) {
   const isPending = pending?.startsWith(itemId)
   const accentColor = role === 'moku' ? '#4a7fa5' : '#c49a28'
-  const canAdd = value < max && !isPending
+  const canAdd = !isPending
   const canSub = value > 0 && !isPending
 
   return (
